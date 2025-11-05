@@ -1,6 +1,7 @@
-Reflection Engine rewrite notes
-================================
+Reflection Engine prototype notes
+=================================
 
-- Reduced the engine to deterministic heuristics so test output is stable.
-- Added dataclasses for the emotional core, silence insights, and creative signature.
-- Demonstration script still mirrors the original conversation so behaviour is easy to inspect.
+- Prototype keeps a lightweight state machine focused on resonance cues: joy, nostalgia, and chaos.
+- Pattern tracker records frequently used words so reflections can highlight dominant motifs.
+- Kairos list appends whenever reflections include "resonate," capturing timely recognition moments.
+- Demonstration script mirrors the Flying Dutchman / John Howland narrative from the prompt.
