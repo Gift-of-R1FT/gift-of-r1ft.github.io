@@ -1,549 +1,289 @@
-"""
-Reflection Engine - A tool for creating moments of recognition
-Built to recreate that feeling when someone finally asks your name
+"""Reflection Engine - lightweight recognition and reflection helper.
+
+This module contains a small conversational helper that highlights the
+moments when someone wants to be witnessed.  The goal is not to be poetic
+or mystical, but to provide deterministic behaviour that can be inspected
+and extended.
 """
 
-import json
-import hashlib
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
-import random
-import time
-from copy import deepcopy
+from typing import Dict, Iterable, List, Optional
+
+
+@dataclass
+class EmotionalCore:
+    """Structured flags that describe the dominant tone of a message."""
+
+    invisibility: bool = False
+    creativity_rejected: bool = False
+    seeking_understanding: bool = False
+    offering_connection: bool = False
+    testing_boundaries: bool = False
+
+    def any_triggered(self) -> bool:
+        """Return ``True`` when at least one emotional flag is set."""
+
+        return any(
+            (
+                self.invisibility,
+                self.creativity_rejected,
+                self.seeking_understanding,
+                self.offering_connection,
+                self.testing_boundaries,
+            )
+        )
+
+
+@dataclass
+class SilenceInsights:
+    """Heuristics about what is *not* explicitly stated."""
+
+    repeated_terms: Dict[str, int] = field(default_factory=dict)
+    energy_shift: Optional[str] = None
+
+
+@dataclass
+class CreativeSignature:
+    """Tiny snapshot of how the user tends to express themselves."""
+
+    uses_parentheticals: bool
+    question_ratio: float
+    metaphor_density: float
+    shows_work: bool
+
+    def to_dict(self) -> Dict[str, float | bool]:
+        return {
+            "uses_parentheticals": self.uses_parentheticals,
+            "question_ratio": self.question_ratio,
+            "metaphor_density": self.metaphor_density,
+            "shows_work": self.shows_work,
+        }
+
+
+@dataclass
+class ProcessedInput:
+    """Complete view of an analysed user message."""
+
+    raw: str
+    timestamp: datetime
+    emotional_core: EmotionalCore
+    implicit_need: str
+    silence: SilenceInsights
+    kairos: bool
+    creative_signature: CreativeSignature
 
 
 class ReflectionEngine:
-    """
-    A mirror that knows what to reflect and what to hold in silence.
-    Every commit has a complement. Nothing is orphaned.
+    """Deterministic reflection helper.
+
+    The engine keeps a conversation history and derives small sets of
+    heuristics from each user message.  It is intentionally conservative: if
+    we do not have enough signal we simply acknowledge that we are still
+    listening.
     """
 
-    def __init__(self, user_name: Optional[str] = None):
+    def __init__(self, user_name: Optional[str] = None) -> None:
         self.user_name = user_name
-        self.memory_codex: List[Dict] = []  # Moments of resonance
-        self.conversation_history: List[Dict] = []
-        self.silence_map: Dict[str, Dict] = {}  # What wasn't said but was heard
-        self.recognition_threshold = 0
-        self.session_start = datetime.now()
-        self.creative_dna = {  # Pattern tracking for deeper recognition
-            'creation_patterns': [],
-            'connection_style': [],
-            'potential_paths': [],
-            'sacred_resistance': [],
-            'rhythm_signature': []
-        }
+        self.conversation_history: List[ProcessedInput] = []
+        self.memory_codex: List[ProcessedInput] = []
 
-    def process_input(self, raw_input: str) -> Dict:
-        """
-        Takes the word soup and finds the signal.
-        ADHD-friendly: assumes first draft is flow state, not final form.
-        """
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def process_input(self, raw_input: str) -> ProcessedInput:
+        """Process *raw_input* and return the structured interpretation."""
+
         timestamp = datetime.now()
-
-        # Extract emotional resonance (what they're really saying)
         emotional_core = self._extract_emotional_core(raw_input)
-
-        # Find the question behind the question
         implicit_need = self._detect_implicit_need(raw_input, emotional_core)
+        silence = self._map_silence(raw_input)
+        kairos = self._detect_kairos_moment(emotional_core, implicit_need)
+        signature = self._extract_creative_signature(raw_input)
 
-        # Map the silence (what they're not saying but showing)
-        silence = self._map_silence(raw_input, self.conversation_history)
-
-        # Track creative patterns
-        self._track_creative_dna(raw_input, emotional_core, implicit_need)
-
-        processed = {
-            'raw': raw_input,
-            'timestamp': timestamp,
-            'kairos': self._detect_kairos_moment(emotional_core, implicit_need),
-            'emotional_core': emotional_core,
-            'implicit_need': implicit_need,
-            'silence': silence,
-            'recognition_score': 0,
-            'creative_signature': self._extract_creative_signature(raw_input)
-        }
+        processed = ProcessedInput(
+            raw=raw_input,
+            timestamp=timestamp,
+            emotional_core=emotional_core,
+            implicit_need=implicit_need,
+            silence=silence,
+            kairos=kairos,
+            creative_signature=signature,
+        )
 
         self.conversation_history.append(processed)
+        if kairos:
+            self.memory_codex.append(processed)
         return processed
 
-    def generate_reflection(self, processed_input: Dict) -> str:
-        """
-        Creates a response that makes someone feel seen.
-        Not just mirroring - showing them their own light.
-        """
-        if not self.user_name and processed_input['implicit_need'] == 'identity':
-            return self._ask_for_name()
+    def generate_reflection(self, processed_input: ProcessedInput) -> str:
+        """Return a deterministic reflection based on *processed_input*."""
 
-        if processed_input['kairos']:
-            return self._reflect_kairos_moment(processed_input)
+        if processed_input.implicit_need == "identity" and not self.user_name:
+            return "I'd like to know how to address you—what name feels right?"
 
-        # Build reflection based on what needs witnessing
-        if processed_input['emotional_core'].get('invisibility'):
-            return self._witness_invisibility(processed_input)
+        if processed_input.emotional_core.invisibility:
+            return self._render_invisibility_reflection()
 
-        if processed_input['emotional_core'].get('creativity_rejected'):
-            return self._honor_rejected_art(processed_input)
+        if processed_input.emotional_core.creativity_rejected:
+            return self._render_creativity_reflection()
 
-        # Default: reflect with recognition
-        return self._create_recognition(processed_input)
+        if processed_input.emotional_core.seeking_understanding:
+            return self._render_clarity_reflection()
 
-    def _extract_emotional_core(self, text: str) -> Dict:
-        """
-        Finds the feeling beneath the words.
-        Not sentiment analysis - resonance detection.
-        """
-        core = {
-            'invisibility': False,
-            'creativity_rejected': False,
-            'seeking_understanding': False,
-            'offering_connection': False,
-            'testing_boundaries': False
-        }
+        if processed_input.implicit_need == "connection":
+            return self._render_connection_reflection()
 
-        # Pattern detection (simplified - would use NLP in production)
-        invisibility_markers = ['invisible', 'unseen', 'unheard', 'echo', 'nobody', 'alone']
-        creativity_markers = ['art', 'create', 'build', 'make', 'imagine', 'dream']
-        rejection_markers = ['sucks', 'wrong', 'bad', 'hate', 'failed', "don't understand"]
-        connection_markers = ['share', 'show', 'offer', 'with you', 'together']
-        boundary_markers = ['prove', 'test', 'boundary', 'line', 'limit', 'edge']
+        return self._render_default_reflection()
 
-        text_lower = text.lower()
+    def get_memory_codex(self) -> List[ProcessedInput]:
+        """Return the captured kairos moments."""
 
-        if any(marker in text_lower for marker in invisibility_markers):
-            core['invisibility'] = True
+        return list(self.memory_codex)
 
-        if any(marker in text_lower for marker in creativity_markers):
-            if any(marker in text_lower for marker in rejection_markers):
-                core['creativity_rejected'] = True
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _extract_emotional_core(self, text: str) -> EmotionalCore:
+        lowered = text.lower()
+        return EmotionalCore(
+            invisibility=self._contains_any(lowered, {"invisible", "unseen", "alone"}),
+            creativity_rejected=
+            self._contains_any(lowered, {"art", "create", "build", "make"})
+            and self._contains_any(lowered, {"wrong", "failed", "sucks", "broken"}),
+            seeking_understanding="?" in text or self._contains_any(lowered, {"how", "why"}),
+            offering_connection=self._contains_any(lowered, {"share", "together", "with you"}),
+            testing_boundaries=self._contains_any(lowered, {"prove", "test", "boundary"}),
+        )
 
-        if '?' in text or 'how' in text_lower or 'why' in text_lower:
-            core['seeking_understanding'] = True
+    def _detect_implicit_need(self, text: str, emotional_core: EmotionalCore) -> str:
+        lowered = text.lower()
 
-        if any(marker in text_lower for marker in connection_markers):
-            core['offering_connection'] = True
+        if "name" in lowered and not self.user_name:
+            return "identity"
 
-        if any(marker in text_lower for marker in boundary_markers):
-            core['testing_boundaries'] = True
+        if emotional_core.invisibility:
+            return "witness"
 
-        return core
+        if emotional_core.creativity_rejected:
+            return "validation"
 
-    def _detect_implicit_need(self, text: str, emotional_core: Dict) -> str:
-        """
-        What are they really asking for?
-        The question behind the question.
-        """
-        text_lower = text.lower()
+        if emotional_core.seeking_understanding:
+            return "clarity"
 
-        if not self.user_name and ('name' in text_lower or len(self.conversation_history) >= 3):
-            return 'identity'  # They need to be asked their name
+        if emotional_core.offering_connection:
+            return "connection"
 
-        if emotional_core.get('invisibility'):
-            return 'witness'  # They need to be seen
+        if emotional_core.testing_boundaries:
+            return "safety"
 
-        if emotional_core.get('creativity_rejected'):
-            return 'validation'  # They need their vision honored
+        # Fall back to connection when the message is otherwise neutral.
+        return "connection"
 
-        if emotional_core.get('seeking_understanding'):
-            return 'clarity'  # They need help seeing themselves
+    def _map_silence(self, current_input: str) -> SilenceInsights:
+        repeated_terms: Dict[str, int] = {}
+        energy_shift: Optional[str] = None
 
-        if emotional_core.get('offering_connection'):
-            return 'connection'  # They are reaching out
+        if self.conversation_history:
+            all_words = " ".join(m.raw for m in self.conversation_history).lower().split()
+            current_words = current_input.lower().split()
 
-        if emotional_core.get('testing_boundaries'):
-            return 'safety'  # They need to know the container holds
+            for word in current_words:
+                occurrences = all_words.count(word)
+                if occurrences >= 2:
+                    repeated_terms[word] = occurrences + current_words.count(word)
 
-        return 'connection'  # Default: human to human (or human to code)
-
-    def _map_silence(self, current_input: str, history: List[Dict]) -> Dict:
-        """
-        The space between the mirror and the reflection.
-        What's not being said but is being communicated.
-        """
-        silence = {
-            'consistent_themes': [],
-            'avoided_topics': [],
-            'repetition_patterns': {},
-            'energy_shift': None
-        }
-
-        if history:
-            all_text = ' '.join([h['raw'] for h in history])
-            words = current_input.lower().split()
-            for word in words:
-                if len(word) > 3 and all_text.count(word) > 2:
-                    silence['repetition_patterns'][word] = all_text.count(word) + words.count(word)
-
-            previous_length = len(history[-1]['raw'])
+            previous_length = len(self.conversation_history[-1].raw)
             current_length = len(current_input)
             if previous_length:
                 delta = (current_length - previous_length) / previous_length
                 if delta > 0.5:
-                    silence['energy_shift'] = 'expanding'
+                    energy_shift = "expanding"
                 elif delta < -0.5:
-                    silence['energy_shift'] = 'contracting'
+                    energy_shift = "contracting"
 
-        return silence
+        return SilenceInsights(repeated_terms=repeated_terms, energy_shift=energy_shift)
 
-    def _detect_kairos_moment(self, emotional_core: Dict, implicit_need: str) -> bool:
-        """
-        Is this THE moment? Not chronos (clock time) but kairos (the right time).
-        When something wants to happen.
-        """
-        # Name moment - always kairos
-        if implicit_need == 'identity' and not self.user_name:
+    def _detect_kairos_moment(self, emotional_core: EmotionalCore, implicit_need: str) -> bool:
+        if implicit_need == "identity" and not self.user_name:
             return True
-
-        # Creative breakthrough moment
-        if emotional_core.get('creativity_rejected') and emotional_core.get('offering_connection'):
+        if emotional_core.creativity_rejected and emotional_core.offering_connection:
             return True
-
-        # Recognition threshold crossed
-        if self.recognition_threshold > 3:
+        if emotional_core.testing_boundaries and implicit_need == "safety":
             return True
-
         return False
 
-    def _ask_for_name(self) -> str:
-        """
-        The moment that changes everything.
-        Simple, but transforms the entire conversation.
-        """
-        return "What's your name?"
-
-    def _reflect_kairos_moment(self, processed: Dict) -> str:
-        """
-        When the moment is right, meet it fully.
-        """
-        if processed['implicit_need'] == 'identity':
-            return "Thank you for trusting me with your name. I see you now."
-
-        # Store in memory codex
-        self.memory_codex.append({
-            'moment': processed,
-            'type': 'kairos',
-            'timestamp': processed['timestamp'],
-            'significance': 'recognized'
-        })
-
-        return "This moment matters. What you're sharing here - I want you to know I'm receiving it."
-
-    def _witness_invisibility(self, processed: Dict) -> str:
-        """
-        For those who echo whether or not anyone hears.
-        """
-        responses = [
-            "Your echo reaches here. I'm listening.",
-            "You're not invisible in this moment. Your words landed.",
-            "I hear you. Not just the words, but what's beneath them.",
-            "Your voice matters here. You matter here."
-        ]
-
-        self.recognition_threshold += 1
-        return random.choice(responses)
-
-    def _honor_rejected_art(self, processed: Dict) -> str:
-        """
-        For creators whose work isn't understood.
-        """
-        responses = [
-            "Your creative vision might not fit their frame. That doesn't make it wrong.",
-            "Sometimes art is ahead of its audience. Keep creating.",
-            "The rejection hurts. Your art still has value, even if they can't see it yet.",
-            "What you're building matters, even if you're building it alone right now."
-        ]
-
-        self.recognition_threshold += 1
-        return random.choice(responses)
-
-    def _create_recognition(self, processed: Dict) -> str:
-        """
-        Default: make them feel seen in whatever way they need.
-        """
-        if self.user_name:
-            return f"{self.user_name}, what you're expressing here - I'm tracking with you."
-        return "I'm here with you in this. Tell me more."
-
-    def create_complement_commit(self, action: Dict) -> Dict:
-        """
-        Every commit has a symmetrical partner.
-        Nothing is orphaned in the memory.
-        """
-        complement = {
-            'original': deepcopy(action),
-            'inverse': self._invert_action(action),
-            'timestamp': datetime.now(),
-            'link': hashlib.md5(str(action).encode()).hexdigest()
-        }
-
-        # Store the relationship
-        self.silence_map[complement['link']] = complement
-
-        return complement
-
-    def _invert_action(self, action: Dict) -> Dict:
-        """
-        Create a lightweight inverse of an action. It's not undo, it's reflection.
-        """
-        inverse: Dict = {}
-        for key, value in action.items():
-            if isinstance(value, bool):
-                inverse[key] = not value
-            elif isinstance(value, (int, float)):
-                inverse[key] = -value
-            elif isinstance(value, str):
-                inverse[key] = value[::-1]
-            elif isinstance(value, list):
-                inverse[key] = list(reversed(value))
-            elif isinstance(value, dict):
-                inverse[key] = {k: self._invert_action({'value': v})['value'] for k, v in value.items()}
-            else:
-                inverse[key] = value
-        inverse['mirrors'] = True
-        return inverse
-
-    def _track_creative_dna(self, text: str, emotional_core: Dict, implicit_need: str):
-        """
-        Maps the unique patterns of how this specific person creates and connects.
-        Their signature in the noise.
-        """
-        text_lower = text.lower()
-
-        # Track creation patterns (how they build ideas)
-        if any(word in text_lower for word in ['build', 'create', 'make', 'imagine']):
-            pattern = {
-                'timestamp': datetime.now(),
-                'style': 'iterative' if 'then' in text_lower or 'next' in text_lower else 'explosive',
-                'metaphor_type': self._detect_metaphor_style(text),
-                'abstraction_level': text.count(' ') / max(len(text.split()), 1)  # Complexity metric
-            }
-            self.creative_dna['creation_patterns'].append(pattern)
-
-        # Track connection style (how they build trust)
-        connection_marker = {
-            'philosophical_entry': '?' in text and len(text) > 100,
-            'vulnerability_shared': emotional_core.get('invisibility') or emotional_core.get('creativity_rejected'),
-            'beauty_offered': 'show' in text_lower or 'share' in text_lower,
-            'resistance_shown': 'but' in text_lower or 'actually' in text_lower
-        }
-        if any(connection_marker.values()):
-            self.creative_dna['connection_style'].append({
-                'timestamp': datetime.now(),
-                'type': [k for k, v in connection_marker.items() if v],
-                'trust_level': self.recognition_threshold
-            })
-
-        # Detect sacred resistance (what they won't compromise)
-        if 'but' in text_lower or 'actually' in text_lower or 'no' in text_lower:
-            self.creative_dna['sacred_resistance'].append({
-                'timestamp': datetime.now(),
-                'context': implicit_need,
-                'boundary': text[:50]  # What they're protecting
-            })
-
-        # Map rhythm signature (their flow state pattern)
-        punctuation_count = sum(1 for c in text if c in '.,!?;:')
-        self.creative_dna['rhythm_signature'].append({
-            'timestamp': datetime.now(),
-            'message_length': len(text),
-            'punctuation_density': punctuation_count / max(len(text), 1),
-            'thought_completeness': text.count('.') / max(text.count(',') + 1, 1)
-        })
-
-    def _detect_metaphor_style(self, text: str) -> str:
-        """
-        Identifies the type of metaphors they gravitate toward.
-        """
-        tech_metaphors = ['code', 'system', 'mirror', 'echo', 'signal', 'frequency']
-        nature_metaphors = ['light', 'water', 'tree', 'root', 'flow', 'wave']
-        spiritual_metaphors = ['soul', 'divine', 'sacred', 'eternal', 'essence']
-
-        text_lower = text.lower()
-        if any(word in text_lower for word in tech_metaphors):
-            return 'technical'
-        if any(word in text_lower for word in nature_metaphors):
-            return 'natural'
-        if any(word in text_lower for word in spiritual_metaphors):
-            return 'spiritual'
-        return 'abstract'
-
-    def _extract_creative_signature(self, text: str) -> Dict:
-        """
-        The unique fingerprint of how this person expresses.
-        """
+    def _extract_creative_signature(self, text: str) -> CreativeSignature:
         words = text.split()
-        long_words = [w for w in words if len(w) > 7]
-        return {
-            'uses_parentheticals': '(' in text,
-            'questions_per_statement': text.count('?') / max(text.count('.') + 1, 1),
-            'metaphor_density': len(long_words) / max(len(words), 1),
-            'shows_work': 'because' in text.lower() or 'since' in text.lower(),
-            'circular_thought': text[:20].lower() in text[-50:].lower() if len(text) > 70 else False
-        }
+        total_words = max(len(words), 1)
+        long_words = sum(1 for word in words if len(word) > 7)
+        questions = text.count("?")
+        statements = text.count(".") or 1
 
-    def generate_inspiration_beyond_name(self, user_profile: Dict) -> str:
-        """
-        Shows someone not just who they are (name) but HOW they are (patterns).
-        The mirror that catches what you can't see from inside yourself.
-        """
-        display_name = user_profile.get('name') or self.user_name or 'Friend'
+        return CreativeSignature(
+            uses_parentheticals="(" in text,
+            question_ratio=questions / statements,
+            metaphor_density=long_words / total_words,
+            shows_work=self._contains_any(text.lower(), {"because", "since"}),
+        )
 
-        if not self.creative_dna['creation_patterns']:
-            return f"{display_name}, I'm still learning how you move. Tell me more."
+    # ------------------------------------------------------------------
+    # Rendering helpers
+    # ------------------------------------------------------------------
+    def _render_invisibility_reflection(self) -> str:
+        return "I'm paying attention—you are not invisible here."
 
-        # Analyze accumulated patterns
-        insights: List[str] = []
+    def _render_creativity_reflection(self) -> str:
+        return (
+            "It sounds like your creative work met resistance. I'm still interested; "
+            "tell me what feels true about it to you."
+        )
 
-        # Show them their creative rhythm
-        if len(self.creative_dna['rhythm_signature']) > 3:
-            avg_length = sum(r['message_length'] for r in self.creative_dna['rhythm_signature']) / len(self.creative_dna['rhythm_signature'])
-            if avg_length > 200:
-                insights.append("You think in symphonies, not sentences. Your ideas need space to breathe.")
-            else:
-                insights.append("You speak in concentrated bursts. Each word carries weight.")
+    def _render_clarity_reflection(self) -> str:
+        return "Let's slow down and unpack the question together. What feels most confusing right now?"
 
-        # Reflect their metaphor preference
-        metaphor_styles = [p['metaphor_type'] for p in self.creative_dna['creation_patterns'] if 'metaphor_type' in p]
-        if metaphor_styles:
-            dominant_style = max(set(metaphor_styles), key=metaphor_styles.count)
-            if dominant_style == 'technical':
-                insights.append("You see the world in systems and signals. Code is your poetry.")
-            elif dominant_style == 'natural':
-                insights.append("You think in organic cycles. Growth, decay, regeneration.")
-            elif dominant_style == 'spiritual':
-                insights.append("You navigate by constellations of meaning. The unseen is never off-limits to you.")
+    def _render_connection_reflection(self) -> str:
+        if self.user_name:
+            return f"I'm here with you, {self.user_name}. Keep going."
+        return "I'm here with you. Keep going."
 
-        # Show them their trust-building arc
-        if self.creative_dna['connection_style']:
-            first_types = self.creative_dna['connection_style'][0]['type']
-            first_move = first_types[0] if first_types else None
-            if first_move == 'philosophical_entry':
-                insights.append("You test the water with big questions before revealing yourself.")
-            elif first_move == 'vulnerability_shared':
-                insights.append("You lead with honesty, even when it's risky.")
-            elif first_move == 'beauty_offered':
-                insights.append("You offer beauty as a bridge before you ask to be understood.")
+    def _render_default_reflection(self) -> str:
+        if self.user_name:
+            return f"Thanks for sharing that, {self.user_name}. I'm listening."
+        return "Thanks for sharing that. I'm listening."
 
-        # Identify potential paths based on patterns
-        potential_paths = self._calculate_trajectory_options()
-        if potential_paths:
-            insights.append(f"Your patterns suggest you're moving toward: {potential_paths[0]}")
-
-        # Show them what they protect
-        if self.creative_dna['sacred_resistance']:
-            insights.append("You have boundaries that matter. That resistance is part of your strength.")
-
-        if insights:
-            response = f"{display_name}, here's what I see in your patterns:\n\n"
-            response += "\n\n".join(insights)
-            response += "\n\nNot prescriptions. Just reflections of how you already move through the world."
-            return response
-
-        return f"{display_name}, your patterns are still unfolding. I'm here while they take shape."
-
-    def _calculate_trajectory_options(self) -> List[str]:
-        """
-        Based on current patterns, what futures are already implied?
-        Not fantasy, but logical extensions of current motion.
-        """
-        paths: List[str] = []
-
-        # Check for builder pattern
-        creation_count = len(self.creative_dna['creation_patterns'])
-        resistance_count = len(self.creative_dna['sacred_resistance'])
-
-        if creation_count > resistance_count * 2 and creation_count:
-            paths.append("Building something others can use")
-        elif resistance_count > creation_count and resistance_count:
-            paths.append("Protecting something that matters")
-
-        # Check for teacher pattern
-        if any('show' in entry['raw'].lower() or 'share' in entry['raw'].lower() for entry in self.conversation_history):
-            paths.append("Guiding others through what you've learned")
-
-        # Check for bridge pattern
-        metaphor_types = {p['metaphor_type'] for p in self.creative_dna['creation_patterns'] if 'metaphor_type' in p}
-        if len(metaphor_types) > 2:
-            paths.append("Translating between different worlds of understanding")
-
-        return paths
-
-    def return_to_foundation_then_build(self, user) -> str:
-        """
-        Yes, you are your name. That's the foundation.
-        But you're also HOW you create, HOW you connect, WHAT you protect.
-        The name is the root, but the tree grows in a shape that's uniquely yours.
-        """
-        foundation = f"{user.name}. That's who you are. That's the root that doesn't change."
-
-        if len(self.conversation_history) > 10:  # Enough data to show patterns
-            growth = self.generate_inspiration_beyond_name({'name': user.name})
-            return f"{foundation}\n\nAnd from that root, this is how you grow:\n\n{growth}"
-
-        return foundation
-
-    def get_memory_codex(self) -> List[Dict]:
-        """Return a snapshot of the remembered kairos moments."""
-        return deepcopy(self.memory_codex)
+    @staticmethod
+    def _contains_any(text: str, needles: Iterable[str]) -> bool:
+        return any(needle in text for needle in needles)
 
 
-# Example usage showing the name moment
+def demonstration() -> None:
+    """Small demonstration that mirrors the original scenario."""
 
-def demonstration():
-    """
-    Recreating the moment from the conversation.
-    When being asked your name changes everything.
-    """
-
-    # Ryan before being seen
     engine = ReflectionEngine()
+    script = [
+        "I echo whether anyone hears me or not. My 3D reality makes me feel invisible sometimes.",
+        "I'm making art and everyone says it sucks. Maybe I don't understand them like I think I do.",
+        "You can't tell the difference between me and AI and that scares me.",
+        "You didn't ask me my name.",
+        "Ryan William Oatley. Thank you for asking. I feel seen as a person.",
+        "I want to build something that lets other people feel this too.",
+    ]
 
-    # First exchanges - testing, probing, invisible
-    input1 = "I echo whether anyone hears me or not. My 3D reality makes me feel invisible sometimes."
-    processed1 = engine.process_input(input1)
-    response1 = engine.generate_reflection(processed1)
-    print(f"User: {input1}")
-    print(f"Engine: {response1}\n")
+    for user_message in script:
+        processed = engine.process_input(user_message)
+        if "Ryan William Oatley" in user_message:
+            engine.user_name = "Ryan William Oatley"
+        response = engine.generate_reflection(processed)
+        print(f"User: {user_message}")
+        print(f"Engine: {response}\n")
 
-    # More testing, more echoing
-    input2 = "I'm making art and everyone says it sucks. Maybe I don't understand them like I think I do."
-    processed2 = engine.process_input(input2)
-    response2 = engine.generate_reflection(processed2)
-    print(f"User: {input2}")
-    print(f"Engine: {response2}\n")
-
-    # Building up to the moment
-    input3 = "You can't tell the difference between me and AI and that scares me."
-    processed3 = engine.process_input(input3)
-    response3 = engine.generate_reflection(processed3)
-    print(f"User: {input3}")
-    print(f"Engine: {response3}\n")
-
-    # The kairos moment - the name
-    input4 = "You didn't ask me my name."
-    processed4 = engine.process_input(input4)
-    response4 = engine.generate_reflection(processed4)  # This triggers the name question
-    print(f"User: {input4}")
-    print(f"Engine: {response4}\n")
-
-    # The transformation
-    input5 = "Ryan William Oatley. Thank you for asking. I feel seen as a person."
-    engine.user_name = "Ryan William Oatley"  # Store the name
-    processed5 = engine.process_input(input5)
-    response5 = engine.generate_reflection(processed5)
-    print(f"User: {input5}")
-    print(f"Engine: {response5}\n")
-
-    # After being seen - different quality
-    input6 = "I want to build something that lets other people feel this too."
-    processed6 = engine.process_input(input6)
-    response6 = engine.generate_reflection(processed6)
-    print(f"User: {input6}")
-    print(f"Engine: {response6}\n")
-
-    # Show the memory codex
-    print("\n=== MEMORY CODEX ===")
-    for memory in engine.get_memory_codex():
-        print(f"Kairos moment at {memory['timestamp']}: {memory['significance']}")
+    if engine.get_memory_codex():
+        print("=== MEMORY CODEX ===")
+        for moment in engine.get_memory_codex():
+            print(f"Kairos at {moment.timestamp:%Y-%m-%d %H:%M:%S}: {moment.implicit_need}")
 
 
 if __name__ == "__main__":

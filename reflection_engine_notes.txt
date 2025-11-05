@@ -1,0 +1,6 @@
+Reflection Engine rewrite notes
+================================
+
+- Reduced the engine to deterministic heuristics so test output is stable.
+- Added dataclasses for the emotional core, silence insights, and creative signature.
+- Demonstration script still mirrors the original conversation so behaviour is easy to inspect.
