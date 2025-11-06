@@ -1,7 +1,8 @@
 Reflection Engine prototype notes
 =================================
 
-- Prototype keeps a lightweight state machine focused on resonance cues: joy, nostalgia, and chaos.
-- Pattern tracker records frequently used words so reflections can highlight dominant motifs.
-- Kairos list appends whenever reflections include "resonate," capturing timely recognition moments.
-- Demonstration script mirrors the Flying Dutchman / John Howland narrative from the prompt.
+- Engine ingests structured turns (timestamp + speaker) so reflections can mirror chat transcripts directly from screenshots.
+- Emotional spectrum now tracks curiosity, optimism, skepticism, and urgency using tuned regex cues.
+- Technology gravity counter highlights Tesla/Dojo, GPU curiosity, frontier AI, and architecture mentions.
+- Kairos events fire when urgency collides with tech themes or when "rescue" language appears, mirroring the ethical pivot in the conversation.
+- Demonstration script replays the shared Tesla Dojo chat and prints reflections, kairos detections, and keyword searches.
