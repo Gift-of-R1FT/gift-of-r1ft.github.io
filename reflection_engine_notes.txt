@@ -1,0 +1,8 @@
+Reflection Engine prototype notes
+=================================
+
+- Engine ingests structured turns (timestamp + speaker) so reflections can mirror chat transcripts directly from screenshots.
+- Emotional spectrum now tracks curiosity, optimism, skepticism, and urgency using tuned regex cues.
+- Technology gravity counter highlights Tesla/Dojo, GPU curiosity, frontier AI, and architecture mentions.
+- Kairos events fire when urgency collides with tech themes or when "rescue" language appears, mirroring the ethical pivot in the conversation.
+- Demonstration script replays the shared Tesla Dojo chat and prints reflections, kairos detections, and keyword searches.
